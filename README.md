@@ -71,6 +71,12 @@ tmux send-keys -t codex-refactor 'codex exec resume --last "Continue the refacto
 - `tmux` installed
 - At least one coding agent CLI (codex, claude, opencode, or pi)
 
+## Compatibility
+
+- **macOS / Linux**: Fully supported. Install tmux via package manager.
+- **Windows**: Requires WSL. Native Windows is not supported (no tmux).
+- **Shell**: Health monitoring detects bash (`$ `), zsh (`% `), and fish (`> `) prompts.
+
 ## License
 
 MIT, Copyright cosformula

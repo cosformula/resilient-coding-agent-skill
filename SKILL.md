@@ -91,7 +91,7 @@ Periodic check flow:
 1. Run `tmux has-session -t <agent-task>` to confirm the tmux session still exists.
 2. Run `tmux capture-pane -t <agent-task> -p -S -<N>` to capture recent output.
 3. Detect likely agent exit by checking the last `N` lines for:
-   - Shell prompt returned (for example, a line ending in `$ ` or `% `)
+   - Shell prompt returned (for example, a line ending in `$ `, `% `, or `> `)
    - Exit indicators (`exit code`, `status <non-zero>`, `exited`)
    - No completion marker (`__TASK_DONE__`)
 4. If crash is detected, run the agent-native resume command in the same tmux session.
@@ -118,7 +118,7 @@ while true; do
     if ! printf '%s\n' "$RECENT" | grep -q "$DONE_MARKER"; then
       PROMPT_BACK=0
       EXIT_HINT=0
-      printf '%s\n' "$RECENT" | grep -Eq '[$%] $' && PROMPT_BACK=1
+      printf '%s\n' "$RECENT" | grep -Eq '([$%] $|> $)' && PROMPT_BACK=1
       printf '%s\n' "$RECENT" | grep -Eiq '(exit code|exited|status [1-9][0-9]*)' && EXIT_HINT=1
 
       if [ "$PROMPT_BACK" -eq 1 ] || [ "$EXIT_HINT" -eq 1 ]; then
