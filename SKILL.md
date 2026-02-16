@@ -13,6 +13,8 @@ metadata:
 
 Long-running coding agent tasks (Codex CLI, Claude Code, OpenCode, Pi) are vulnerable to interruption: orchestrator restarts, process crashes, network drops. This skill decouples the coding agent process from the orchestrator using tmux, and leverages agent-native session resume for recovery.
 
+**Note on placeholders:** All `<task-name>`, `<project-dir>`, and `<task prompt>` values in this document are templates for the orchestrator to fill in. The orchestrator must sanitize these values before interpolation (e.g., restrict to `[A-Za-z0-9._-]` for session names, shell-escape prompts) to prevent injection.
+
 ## Prerequisites
 
 This skill assumes the orchestrator is already configured to use coding agent CLIs (Codex, Claude Code, etc.) for coding tasks instead of native sessions. If the orchestrator is still using `sessions_spawn` for coding work, configure it to prefer coding agents first (e.g., via AGENTS.md or equivalent). See the `coding-agent` skill for setup.
@@ -111,18 +113,9 @@ Use a done marker in your start command so the monitor can distinguish normal co
 tmux send-keys -t codex-<task-name> 'cd <project-dir> && codex exec --full-auto "<prompt>" && echo "__TASK_DONE__"' Enter
 ```
 
-For Codex tasks, save the session ID to `/tmp/<session>.codex-session-id` when the task starts (see **Codex CLI** above). The monitor script reads that file to resume the exact task session.
+For Codex tasks, save the session ID to `/tmp/<session>.codex-session-id` when the task starts (see **Codex CLI** above). The monitor reads that file to resume the exact task session.
 
-Run the monitor script in the background:
-
-```bash
-./scripts/monitor.sh codex-<task-name> codex
-# or: ./scripts/monitor.sh claude-<task-name> claude
-```
-
-The script checks every 3 minutes. On consecutive failures the interval doubles (3m, 6m, 12m, ...) and resets when the agent is running normally. Stops after 5 hours wall-clock.
-
-When starting long tasks, run the monitor in the background (via `&`, `nohup`, or the orchestrator's cron) so recovery happens automatically.
+The orchestrator should run this check loop periodically (every 3-5 minutes, via cron or a background timer). On consecutive failures, double the interval (3m, 6m, 12m, ...) and reset when the agent is running normally. Stop after 5 hours wall-clock.
 
 ## Recovery After Interruption
 
