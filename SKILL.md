@@ -107,21 +107,17 @@ Concrete periodic monitor with exponential backoff:
 ```bash
 SESSION="codex-<task-name>"   # or claude-<task-name>
 AGENT="codex"                 # codex | claude
-LINES=120
-DONE_MARKER="__TASK_DONE__"
-BASE_INTERVAL=180             # initial check interval (seconds)
-MAX_TOTAL=3600                # stop retrying after this many seconds (default: 1 hour)
 RETRY_COUNT=0
 TOTAL_WAIT=0
 
 while true; do
-  INTERVAL=$(( BASE_INTERVAL * (2 ** RETRY_COUNT) ))
+  INTERVAL=$(( 180 * (2 ** RETRY_COUNT) ))
 
   if tmux has-session -t "$SESSION" 2>/dev/null; then
-    OUTPUT="$(tmux capture-pane -t "$SESSION" -p -S -"${LINES}")"
+    OUTPUT="$(tmux capture-pane -t "$SESSION" -p -S -120)"
     RECENT="$(printf '%s\n' "$OUTPUT" | tail -n 40)"
 
-    if printf '%s\n' "$RECENT" | grep -q "$DONE_MARKER"; then
+    if printf '%s\n' "$RECENT" | grep -q "__TASK_DONE__"; then
       break  # task completed normally
     fi
 
@@ -134,8 +130,8 @@ while true; do
       RETRY_COUNT=$(( RETRY_COUNT + 1 ))
       TOTAL_WAIT=$(( TOTAL_WAIT + INTERVAL ))
 
-      if [ "$TOTAL_WAIT" -ge "$MAX_TOTAL" ]; then
-        echo "Retry timeout reached (${MAX_TOTAL}s). Stopping monitor."
+      if [ "$TOTAL_WAIT" -ge 18000 ]; then
+        echo "Retry timeout reached (5h). Stopping monitor."
         break
       fi
 
@@ -149,14 +145,14 @@ while true; do
       esac
     else
       RETRY_COUNT=0  # agent is running normally, reset backoff
-      INTERVAL=$BASE_INTERVAL
+      INTERVAL=180
     fi
   fi
   sleep "$INTERVAL"
 done
 ```
 
-`MAX_TOTAL` should match or exceed the rate limit reset window of your model subscription. For example, if rate limits reset hourly, set it to 3600. If the agent keeps failing beyond this window, the monitor stops and you should investigate manually.
+Retry interval starts at 3 minutes and doubles on each consecutive failure (3m → 6m → 12m → ...). Resets when the agent is running normally. Stops after 5 hours of cumulative retry time, which aligns with typical subscription session limit reset windows.
 
 When starting long tasks, configure this monitor loop in the orchestrator (background shell loop, supervisor, or cron) so recovery runs automatically without manual checks.
 
