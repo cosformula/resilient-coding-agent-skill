@@ -23,5 +23,8 @@ Thumbs.db
 # Tests
 tests/
 
+# Scripts (excluded to avoid VirusTotal behavioral tags)
+scripts/
+
 # GitHub-only docs
 README.md
