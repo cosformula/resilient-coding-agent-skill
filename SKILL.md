@@ -15,7 +15,11 @@ Long-running coding agent tasks (Codex CLI, Claude Code, OpenCode, Pi) are vulne
 
 **Placeholders:** `<task-name>` and `<project-dir>` are filled in by the orchestrator. `<task-name>` must match `[a-z0-9-]` only. `<project-dir>` must be a valid existing directory.
 
-**Prompt safety:** Task prompts are never interpolated into shell commands. Instead, write the prompt to a temp file using the orchestrator's `write` tool (no shell involved), then reference it with `"$(cat /tmp/<agent>-<task-name>.prompt)"` inside the tmux command. The shell treats command substitution output inside double quotes as a single literal argument, preventing injection.
+**Temp directory:** Each task uses a secure temp directory created with `mktemp -d`. Store this path as `<tmpdir>` and use it for all task files (prompt, events, session ID, done marker). This avoids predictable filenames and symlink/race conditions. Example: `TMPDIR=$(mktemp -d)` produces something like `/var/folders/xx/.../T/tmp.aBcDeFgH`.
+
+**Prompt safety:** Task prompts are never interpolated into shell commands. Instead, write the prompt to a temp file using the orchestrator's `write` tool (no shell involved), then reference it with `"$(cat $TMPDIR/prompt)"` inside the tmux command. The shell treats command substitution output inside double quotes as a single literal argument, preventing injection. This depends on the orchestrator's `write` tool not invoking a shell; OpenClaw's built-in `write` tool meets this requirement.
+
+**Sensitive output:** tmux scrollback and event log files may contain secrets or API keys from agent output. On shared machines, restrict file permissions (`chmod 600`) and clean up temp directories after task completion.
 
 ## Prerequisites
 
@@ -37,16 +41,25 @@ Create a tmux session with a descriptive name. Use the agent prefix (`codex-`, `
 ### Codex CLI
 
 ```bash
-# Step 1: Write prompt to file (use orchestrator's write tool, not echo/shell)
-# File: /tmp/codex-<task-name>.prompt
+# Step 1: Create secure temp directory
+TMPDIR=$(mktemp -d)
+chmod 700 "$TMPDIR"
 
-# Step 2: Launch in tmux
-tmux new-session -d -s codex-<task-name>
-tmux send-keys -t codex-<task-name> 'cd <project-dir> && set -o pipefail && codex exec --full-auto --json "$(cat /tmp/codex-<task-name>.prompt)" | tee /tmp/codex-<task-name>.events.jsonl && echo "__TASK_DONE__"' Enter
+# Step 2: Write prompt to file (use orchestrator's write tool, not echo/shell)
+# File: $TMPDIR/prompt
 
-# Capture this task's Codex session ID at start; resume --last is unsafe with concurrent tasks.
-until [ -s /tmp/codex-<task-name>.codex-session-id ]; do
-  sed -nE 's/.*"thread_id":"([^"]+)".*/\1/p' /tmp/codex-<task-name>.events.jsonl 2>/dev/null | head -n 1 > /tmp/codex-<task-name>.codex-session-id
+# Step 3: Launch in tmux (pass TMPDIR via env)
+tmux new-session -d -s codex-<task-name> -e "TASK_TMPDIR=$TMPDIR"
+tmux send-keys -t codex-<task-name> 'cd <project-dir> && set -o pipefail && codex exec --full-auto --json "$(cat $TASK_TMPDIR/prompt)" | tee $TASK_TMPDIR/events.jsonl && echo "__TASK_DONE__"' Enter
+
+# Step 4: Capture this task's Codex session ID; resume --last is unsafe with concurrent tasks.
+# Uses jq for reliable JSON parsing (falls back to grep if jq unavailable).
+until [ -s "$TMPDIR/codex-session-id" ]; do
+  if command -v jq &>/dev/null; then
+    jq -r 'select(.thread_id) | .thread_id' "$TMPDIR/events.jsonl" 2>/dev/null | head -n 1 > "$TMPDIR/codex-session-id"
+  else
+    grep -oE '"thread_id":"[^"]+"' "$TMPDIR/events.jsonl" 2>/dev/null | head -n 1 | cut -d'"' -f4 > "$TMPDIR/codex-session-id"
+  fi
   sleep 1
 done
 ```
@@ -54,21 +67,26 @@ done
 ### Claude Code
 
 ```bash
-# Write prompt to /tmp/claude-<task-name>.prompt first
-tmux new-session -d -s claude-<task-name>
-tmux send-keys -t claude-<task-name> 'cd <project-dir> && claude -p "$(cat /tmp/claude-<task-name>.prompt)" && echo "__TASK_DONE__"' Enter
+# Create secure temp directory and write prompt to $TMPDIR/prompt first
+TMPDIR=$(mktemp -d) && chmod 700 "$TMPDIR"
+tmux new-session -d -s claude-<task-name> -e "TASK_TMPDIR=$TMPDIR"
+tmux send-keys -t claude-<task-name> 'cd <project-dir> && claude -p "$(cat $TASK_TMPDIR/prompt)" && echo "__TASK_DONE__"' Enter
 ```
 
 ### OpenCode / Pi
 
 ```bash
-# Write prompt to /tmp/opencode-<task-name>.prompt first
-tmux new-session -d -s opencode-<task-name>
-tmux send-keys -t opencode-<task-name> 'cd <project-dir> && opencode run "$(cat /tmp/opencode-<task-name>.prompt)" && echo "__TASK_DONE__"' Enter
+# Create secure temp directory and write prompt to $TMPDIR/prompt first
+TMPDIR=$(mktemp -d) && chmod 700 "$TMPDIR"
 
-# Write prompt to /tmp/pi-<task-name>.prompt first
-tmux new-session -d -s pi-<task-name>
-tmux send-keys -t pi-<task-name> 'cd <project-dir> && pi -p "$(cat /tmp/pi-<task-name>.prompt)" && echo "__TASK_DONE__"' Enter
+# OpenCode
+tmux new-session -d -s opencode-<task-name> -e "TASK_TMPDIR=$TMPDIR"
+tmux send-keys -t opencode-<task-name> 'cd <project-dir> && opencode run "$(cat $TASK_TMPDIR/prompt)" && echo "__TASK_DONE__"' Enter
+
+# Pi (separate temp dir)
+TMPDIR=$(mktemp -d) && chmod 700 "$TMPDIR"
+tmux new-session -d -s pi-<task-name> -e "TASK_TMPDIR=$TMPDIR"
+tmux send-keys -t pi-<task-name> 'cd <project-dir> && pi -p "$(cat $TASK_TMPDIR/prompt)" && echo "__TASK_DONE__"' Enter
 ```
 
 ### Completion Notification (Optional)
@@ -77,13 +95,13 @@ Chain a notification command after the agent so you know when it finishes. Use `
 
 ```bash
 # Generic: touch a marker file
-tmux send-keys -t codex-<task-name> 'cd <project-dir> && codex exec --full-auto "$(cat /tmp/codex-<task-name>.prompt)" && touch /tmp/codex-<task-name>.done; echo "__TASK_DONE__"' Enter
+tmux send-keys -t codex-<task-name> 'cd <project-dir> && codex exec --full-auto "$(cat $TASK_TMPDIR/prompt)" && touch $TASK_TMPDIR/done; echo "__TASK_DONE__"' Enter
 
 # macOS: system notification
-tmux send-keys -t codex-<task-name> 'cd <project-dir> && codex exec --full-auto "$(cat /tmp/codex-<task-name>.prompt)" && osascript -e "display notification \"Task done\" with title \"Codex\""; echo "__TASK_DONE__"' Enter
+tmux send-keys -t codex-<task-name> 'cd <project-dir> && codex exec --full-auto "$(cat $TASK_TMPDIR/prompt)" && osascript -e "display notification \"Task done\" with title \"Codex\""; echo "__TASK_DONE__"' Enter
 
 # OpenClaw: system event (immediate wake)
-tmux send-keys -t codex-<task-name> 'cd <project-dir> && codex exec --full-auto "$(cat /tmp/codex-<task-name>.prompt)" && openclaw system event --text "Codex done: <task-name>" --mode now; echo "__TASK_DONE__"' Enter
+tmux send-keys -t codex-<task-name> 'cd <project-dir> && codex exec --full-auto "$(cat $TASK_TMPDIR/prompt)" && openclaw system event --text "Codex done: <task-name>" --mode now; echo "__TASK_DONE__"' Enter
 ```
 
 ## Monitor Progress
@@ -119,10 +137,10 @@ Periodic check flow:
 Use a done marker in your start command so the monitor can distinguish normal completion from crashes:
 
 ```bash
-tmux send-keys -t codex-<task-name> 'cd <project-dir> && codex exec --full-auto "$(cat /tmp/codex-<task-name>.prompt)" && echo "__TASK_DONE__"' Enter
+tmux send-keys -t codex-<task-name> 'cd <project-dir> && codex exec --full-auto "$(cat $TASK_TMPDIR/prompt)" && echo "__TASK_DONE__"' Enter
 ```
 
-For Codex tasks, save the session ID to `/tmp/<session>.codex-session-id` when the task starts (see **Codex CLI** above). The monitor reads that file to resume the exact task session.
+For Codex tasks, save the session ID to `$TMPDIR/codex-session-id` when the task starts (see **Codex CLI** above). The monitor reads that file to resume the exact task session.
 
 The orchestrator should run this check loop periodically (every 3-5 minutes, via cron or a background timer). On consecutive failures, double the interval (3m, 6m, 12m, ...) and reset when the agent is running normally. Stop after 5 hours wall-clock.
 
@@ -132,7 +150,7 @@ For automated crash detection and retries, use **Health Monitoring** above.
 Keep this section as a manual fallback when you need to intervene directly:
 
 ```bash
-# Codex (prefer explicit session ID from /tmp/<session>.codex-session-id)
+# Codex (prefer explicit session ID from $TMPDIR/codex-session-id)
 tmux send-keys -t codex-<task-name> 'codex exec resume <session-id> "Continue the previous task"' Enter
 
 # Claude Code

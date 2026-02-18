@@ -1,7 +1,7 @@
 # Resilient Coding Agent
 
 [![ClawHub](https://img.shields.io/badge/ClawHub-resilient--coding--agent-blue)](https://clawhub.com/cosformula/resilient-coding-agent)
-[![Version](https://img.shields.io/badge/version-0.1.1-green)](https://clawhub.com/cosformula/resilient-coding-agent)
+[![Version](https://img.shields.io/badge/version-0.2.0-green)](https://clawhub.com/cosformula/resilient-coding-agent)
 [![GitHub stars](https://img.shields.io/github/stars/cosformula/resilient-coding-agent-skill)](https://github.com/cosformula/resilient-coding-agent-skill)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/cosformula/resilient-coding-agent-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/cosformula/resilient-coding-agent-skill/actions/workflows/ci.yml)
@@ -57,15 +57,21 @@ git clone https://github.com/cosformula/resilient-coding-agent-skill.git
 ```bash
 # Start a long Codex task in tmux
 SESSION="codex-refactor"
-EVENTS_FILE="/tmp/${SESSION}.events.jsonl"
-SESSION_FILE="/tmp/${SESSION}.codex-session-id"
+TMPDIR=$(mktemp -d) && chmod 700 "$TMPDIR"
 
-tmux new-session -d -s "$SESSION"
-tmux send-keys -t "$SESSION" 'cd ~/project && set -o pipefail && codex exec --full-auto --json "Refactor auth module" | tee /tmp/codex-refactor.events.jsonl && openclaw system event --text "Codex done: auth refactor" --mode now; echo "__TASK_DONE__"' Enter
+# Write prompt (in practice, use orchestrator's write tool)
+echo "Refactor auth module" > "$TMPDIR/prompt"
+
+tmux new-session -d -s "$SESSION" -e "TASK_TMPDIR=$TMPDIR"
+tmux send-keys -t "$SESSION" 'cd ~/project && set -o pipefail && codex exec --full-auto --json "$(cat $TASK_TMPDIR/prompt)" | tee $TASK_TMPDIR/events.jsonl && openclaw system event --text "Codex done: auth refactor" --mode now; echo "__TASK_DONE__"' Enter
 
 # Save this task's Codex session ID (safer than resume --last when multiple tasks run)
-until [ -s "$SESSION_FILE" ]; do
-  sed -nE 's/.*"thread_id":"([^"]+)".*/\1/p' "$EVENTS_FILE" 2>/dev/null | head -n 1 > "$SESSION_FILE"
+until [ -s "$TMPDIR/codex-session-id" ]; do
+  if command -v jq &>/dev/null; then
+    jq -r 'select(.thread_id) | .thread_id' "$TMPDIR/events.jsonl" 2>/dev/null | head -n 1 > "$TMPDIR/codex-session-id"
+  else
+    grep -oE '"thread_id":"[^"]+"' "$TMPDIR/events.jsonl" 2>/dev/null | head -n 1 | cut -d'"' -f4 > "$TMPDIR/codex-session-id"
+  fi
   sleep 1
 done
 
@@ -73,7 +79,7 @@ done
 tmux capture-pane -t "$SESSION" -p -S -100
 
 # If Codex crashes, resume this exact session
-CODEX_SESSION_ID="$(cat "$SESSION_FILE")"
+CODEX_SESSION_ID="$(cat "$TMPDIR/codex-session-id")"
 tmux send-keys -t "$SESSION" "codex exec resume $CODEX_SESSION_ID \"Continue the refactor\"" Enter
 
 # Or run the monitor script for automated crash detection + resume
