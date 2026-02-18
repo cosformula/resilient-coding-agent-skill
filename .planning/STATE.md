@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-18)
 
 **Core value:** Every coding task the Brain delegates must reliably execute in an isolated Claude Code session, with the right model for the job, crash recovery, output capture, and structured results.
-**Current focus:** Phase 1: Foundation
+**Current focus:** Phase 2: Detection Infrastructure
 
 ## Current Position
 
-Phase: 1 of 5 (Foundation)
+Phase: 2 of 5 (Detection Infrastructure)
 Plan: 2 of 2 in current phase
 Status: Executing
-Last activity: 2026-02-18 -- Completed 01-02-PLAN.md
+Last activity: 2026-02-18 -- Completed 02-02-PLAN.md
 
-Progress: [##........] 20%
+Progress: [####......] 40%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 1.5min
-- Total execution time: 0.05 hours
+- Total plans completed: 3
+- Average duration: 1.3min
+- Total execution time: 0.07 hours
 
 **By Phase:**
 
@@ -29,10 +29,11 @@ Progress: [##........] 20%
 |-------|-------|-------|----------|
 | Phase 01 P01 | 1 task | 2min | 2min |
 | Phase 01 P02 | 1 task | 1min | 1min |
+| Phase 02 P02 | 1 task | 1min | 1min |
 
 **Recent Trend:**
-- Last 5 plans: 2min, 1min
-- Trend: Starting
+- Last 5 plans: 2min, 1min, 1min
+- Trend: Consistent
 
 *Updated after each plan completion*
 
@@ -51,6 +52,9 @@ Recent decisions affecting current work:
 - [Phase 01 P01]: Task directory schema documented as specification only -- files created in their designated phase
 - [Phase 01]: Used claude -c (continue most recent) instead of deprecated claude --resume
 - [Phase 01]: Removed all multi-agent support (codex, opencode, pi) -- project is Claude Code only
+- [Phase 02 P02]: Done-file checked BEFORE PID liveness to prevent race conditions
+- [Phase 02 P02]: 10-second grace period after resume instead of PID re-capture (deferred to Phase 4)
+- [Phase 02 P02]: TASK_TMPDIR validated as directory at startup to fail fast on bad paths
 
 ### Pending Todos
 
@@ -65,5 +69,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-18
-Stopped at: Completed 01-02-PLAN.md -- Phase 1 Foundation complete
+Stopped at: Completed 02-02-PLAN.md -- Monitor detection rewrite complete
 Resume file: None

@@ -47,8 +47,8 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TS-1 | Phase 2 | Pending |
-| TS-2 | Phase 2 | Pending |
+| TS-1 | Phase 2 | Complete |
+| TS-2 | Phase 2 | Complete |
 | TS-3 | Phase 2 | Pending |
 | TS-4 | Phase 2 | Pending |
 | TS-5 | Phase 1 | Complete |
