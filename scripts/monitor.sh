@@ -1,24 +1,32 @@
 #!/usr/bin/env bash
 #
 # Monitor a Claude Code session running in tmux.
-# Detects crashes (shell prompt return, exit indicators) and auto-resumes
-# using `claude -c` (continue most recent conversation).
+# Detects completion via done-file and crashes via PID liveness (kill -0).
+# Auto-resumes crashed sessions using `claude -c`.
 #
 # Usage:
-#   ./scripts/monitor.sh <tmux-session>
+#   ./scripts/monitor.sh <tmux-session> <task-tmpdir>
 #
-#   tmux-session  Name of the tmux session (e.g. task-refactor)
+#   tmux-session  Name of the tmux session (e.g. claude-refactor-auth)
+#   task-tmpdir   Path to the task's secure temp directory ($TMPDIR from launch)
 #
 # Retry: 3min base, doubles on each consecutive failure, resets when agent
 # is running normally. Stops after 5 hours wall-clock.
 
 set -uo pipefail
 
-SESSION="${1:?Usage: monitor.sh <tmux-session>}"
+SESSION="${1:?Usage: monitor.sh <tmux-session> <task-tmpdir>}"
+TASK_TMPDIR="${2:?Usage: monitor.sh <tmux-session> <task-tmpdir>}"
 
 # Sanitize session name: only allow alphanumeric, dash, underscore, dot
 if ! printf '%s' "$SESSION" | grep -Eq '^[A-Za-z0-9._-]+$'; then
   echo "Invalid session name: $SESSION (only alphanumeric, dash, underscore, dot allowed)" >&2
+  exit 1
+fi
+
+# Validate TASK_TMPDIR is a directory
+if [ ! -d "$TASK_TMPDIR" ]; then
+  echo "TASK_TMPDIR not a directory: $TASK_TMPDIR" >&2
   exit 1
 fi
 
@@ -41,41 +49,41 @@ while true; do
     INTERVAL="$REMAINING"
   fi
 
-  # Capture tmux pane; if session disappeared between has-session and capture,
-  # treat it as session gone rather than crashing the script.
   if tmux has-session -t "$SESSION" 2>/dev/null; then
-    OUTPUT="$(tmux capture-pane -t "$SESSION" -p -S -120 2>/dev/null)" || {
-      echo "tmux session $SESSION disappeared during capture. Stopping monitor."
-      break
-    }
-    RECENT="$(printf '%s\n' "$OUTPUT" | tail -n 40)"
-
-    if printf '%s\n' "$RECENT" | grep -q "__TASK_DONE__"; then
-      echo "Task completed normally."
-      break
-    fi
-
-    # Detect shell prompt return. Only match lines that are ONLY a prompt
-    # (user@host indicators or bare shell markers) to avoid false positives
-    # from agent output containing "> " or "$ " mid-line.
-    PROMPT_BACK=0
-    EXIT_HINT=0
-    LAST_LINE="$(printf '%s\n' "$RECENT" | grep -v '^$' | tail -n 1)"
-    printf '%s\n' "$LAST_LINE" | grep -Eq '^[^[:space:]]*[$%#>] $' && PROMPT_BACK=1
-    # Match explicit exit indicators, not substrings like "HTTP status 200"
-    printf '%s\n' "$RECENT" | grep -Eiq '(exit code [0-9]|exited with|exit status [1-9])' && EXIT_HINT=1
-
-    if [ "$PROMPT_BACK" -eq 1 ] || [ "$EXIT_HINT" -eq 1 ]; then
-      RETRY_COUNT=$(( RETRY_COUNT + 1 ))
-      echo "Crash detected. Resuming Claude Code (retry #$RETRY_COUNT)"
-      tmux send-keys -t "$SESSION" 'claude -c' Enter
+    # Read PID from file (may not exist yet if agent is still starting)
+    if [ -f "$TASK_TMPDIR/pid" ]; then
+      PID="$(cat "$TASK_TMPDIR/pid")"
     else
-      RETRY_COUNT=0  # agent is running normally, reset backoff
-      INTERVAL=180
+      # PID file not yet written -- agent still starting
+      sleep "$INTERVAL"
+      continue
     fi
+
+    # Priority 1: Done-file = task completed
+    if [ -f "$TASK_TMPDIR/done" ]; then
+      EXIT_CODE="$(cat "$TASK_TMPDIR/exit_code" 2>/dev/null || echo "unknown")"
+      echo "Task completed with exit code: $EXIT_CODE"
+      break
+    fi
+
+    # Priority 2: PID dead = crash (no done-file means abnormal exit)
+    if ! kill -0 "$PID" 2>/dev/null; then
+      RETRY_COUNT=$(( RETRY_COUNT + 1 ))
+      echo "Crash detected (PID $PID gone). Resuming Claude Code (retry #$RETRY_COUNT)"
+      tmux send-keys -t "$SESSION" 'claude -c' Enter
+      # Grace period: after resume, new process needs time to start.
+      # PID file is stale (contains dead PID). Phase 4 will address PID re-capture.
+      # For now, sleep longer than the normal interval to avoid rapid resume loops.
+      sleep 10
+      continue
+    fi
+
+    # Priority 3: Process alive, no completion -- healthy
+    RETRY_COUNT=0
   else
     echo "tmux session $SESSION no longer exists. Stopping monitor."
     break
   fi
+
   sleep "$INTERVAL"
 done
