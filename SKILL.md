@@ -73,9 +73,9 @@ $TMPDIR/                         # mktemp -d, chmod 700
                                  #   Created: Phase 2
 
   manifest.json                  # Structured task state (JSON)
-                                 #   Written by: task wrapper + monitor
-                                 #   Read by: Brain
-                                 #   Created: Phase 3
+                                 #   Written by: orchestrator (initial) + task wrapper (PID, completion)
+                                 #   Read by: Brain (jq -r '.status')
+                                 #   Created: Phase 3 (active)
 
   done                           # Completion marker (presence = complete)
                                  #   Written by: task wrapper on exit
@@ -88,7 +88,7 @@ $TMPDIR/                         # mktemp -d, chmod 700
                                  #   Created: Phase 2
 ```
 
-**Status:** Phase 1 created `prompt`. Phase 2 implements `pid`, `output.log`, `done`, and `exit_code` via the shell wrapper and pipe-pane patterns above. The remaining file (`manifest.json`) is created in Phase 3. Each file lists its phase of introduction -- do not create files before their designated phase.
+**Status:** Phase 1 created `prompt`. Phase 2 implements `pid`, `output.log`, `done`, and `exit_code` via the shell wrapper and pipe-pane patterns. Phase 3 adds `manifest.json` -- created by the orchestrator in Step 3 (initial fields with pid=0), updated by the wrapper in Step 6 (real PID after `$!` capture, then completion fields before `touch done`). All task directory files are now active.
 
 ## Start a Task
 
@@ -101,21 +101,36 @@ TMPDIR=$(mktemp -d) && chmod 700 "$TMPDIR"
 # Step 2: Write prompt to file (use orchestrator's write tool, not echo/shell)
 # File: $TMPDIR/prompt
 
-# Step 3: Create tmux session (pass TMPDIR via env)
+# Step 3: Create initial manifest
+jq -n \
+  --arg task_name "<task-name>" \
+  --arg model "<model-name>" \
+  --arg project_dir "<project-dir>" \
+  --arg session_name "claude-<task-name>" \
+  --arg pid "0" \
+  --arg tmpdir "$TMPDIR" \
+  --arg started_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+  --arg status "running" \
+  '{task_name: $task_name, model: $model, project_dir: $project_dir, session_name: $session_name, pid: ($pid | tonumber), tmpdir: $tmpdir, started_at: $started_at, status: $status}' \
+  > "$TMPDIR/manifest.json.tmp" && mv "$TMPDIR/manifest.json.tmp" "$TMPDIR/manifest.json"
+
+# Step 4: Create tmux session (pass TMPDIR via env)
 tmux new-session -d -s claude-<task-name> -e "TASK_TMPDIR=$TMPDIR"
 
-# Step 4: Start output capture with ANSI stripping (BEFORE send-keys)
+# Step 5: Start output capture with ANSI stripping (BEFORE send-keys)
 tmux pipe-pane -t claude-<task-name> -O \
   "perl -pe 's/\x1b\[[0-9;]*[mGKHfABCDJsu]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b\(B//g; s/\r//g' >> $TMPDIR/output.log"
 
-# Step 5: Launch with wrapper (PID capture + done-file protocol)
+# Step 6: Launch with wrapper (PID capture + manifest updates + done-file protocol)
 tmux send-keys -t claude-<task-name> \
-  'cd <project-dir> && claude -p --model <model-name> "$(cat $TASK_TMPDIR/prompt)" & CLAUDE_PID=$!; echo "$CLAUDE_PID" > "$TASK_TMPDIR/pid"; wait $CLAUDE_PID; echo $? > "$TASK_TMPDIR/exit_code.tmp" && mv "$TASK_TMPDIR/exit_code.tmp" "$TASK_TMPDIR/exit_code" && touch "$TASK_TMPDIR/done"' Enter
+  'cd <project-dir> && claude -p --model <model-name> "$(cat $TASK_TMPDIR/prompt)" & CLAUDE_PID=$!; echo "$CLAUDE_PID" > "$TASK_TMPDIR/pid"; jq --argjson pid "$CLAUDE_PID" ".pid = \$pid" "$TASK_TMPDIR/manifest.json" > "$TASK_TMPDIR/manifest.json.tmp" && mv "$TASK_TMPDIR/manifest.json.tmp" "$TASK_TMPDIR/manifest.json"; wait $CLAUDE_PID; ECODE=$?; echo "$ECODE" > "$TASK_TMPDIR/exit_code.tmp" && mv "$TASK_TMPDIR/exit_code.tmp" "$TASK_TMPDIR/exit_code"; if [ "$ECODE" -eq 0 ]; then STATUS=completed; else STATUS=failed; fi; jq --arg finished_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" --argjson exit_code "$ECODE" --arg status "$STATUS" --arg output_tail "$(tail -n 100 "$TASK_TMPDIR/output.log" 2>/dev/null || echo "")" ". + {finished_at: \$finished_at, exit_code: \$exit_code, status: \$status, output_tail: \$output_tail}" "$TASK_TMPDIR/manifest.json" > "$TASK_TMPDIR/manifest.json.tmp" && mv "$TASK_TMPDIR/manifest.json.tmp" "$TASK_TMPDIR/manifest.json"; touch "$TASK_TMPDIR/done"' Enter
 ```
 
-**Step 4 -- pipe-pane** is set BEFORE send-keys to guarantee no output is missed. The `-O` flag captures only pane output (not input). The perl chain strips four categories of ANSI escapes: CSI sequences (colors, cursor movement), OSC sequences (window titles), charset selection, and carriage returns (progress bar overwrites).
+**Step 3 -- manifest** creates `manifest.json` with all eight fields before the tmux session exists. The `jq -n` flag generates JSON from scratch. PID is set to `0` (placeholder) because the real PID is not known until after background launch. The `--arg pid "0"` + `($pid | tonumber)` pattern produces a JSON number (not string). The atomic write-to-tmp + `mv` pattern ensures the Brain never reads a partial file.
 
-**Step 5 -- wrapper** runs these steps in sequence: (1) launch Claude Code in background with `&`, (2) capture PID via `$!`, (3) write PID to file immediately, (4) `wait` blocks until Claude exits and preserves exit code, (5) atomic exit_code write (write-to-tmp then `mv`), (6) `touch done` as the completion signal. The exit_code is written BEFORE done to prevent a race condition where the monitor sees done but exit_code does not yet exist.
+**Step 5 -- pipe-pane** is set BEFORE send-keys to guarantee no output is missed. The `-O` flag captures only pane output (not input). The perl chain strips four categories of ANSI escapes: CSI sequences (colors, cursor movement), OSC sequences (window titles), charset selection, and carriage returns (progress bar overwrites).
+
+**Step 6 -- wrapper** runs these steps in sequence: (1) launch Claude Code in background with `&`, (2) capture PID via `$!`, (3) write PID to file immediately, (4) update manifest with real PID via `jq --argjson`, (5) `wait` blocks until Claude exits and preserves exit code, (6) atomic exit_code write (write-to-tmp then `mv`), (7) determine status (completed/failed) from exit code, (8) update manifest with `finished_at`, `exit_code`, `status`, and `output_tail` via `jq` merge, (9) `touch done` as the completion signal. The exit_code and manifest completion update are both written BEFORE done to prevent a race condition where the monitor sees done but results do not yet exist. Inside the single-quoted send-keys string, jq variable references use `\$varname` so the pane shell passes literal `$` to jq.
 
 Replace `<model-name>` with the full model name from the mapping table:
 - Brain sends `opus` --> use `claude-opus-4-6`
@@ -129,10 +144,10 @@ Chain an OpenClaw system event after the agent so the Brain is notified on compl
 
 ```bash
 tmux send-keys -t claude-<task-name> \
-  'cd <project-dir> && claude -p --model <model-name> "$(cat $TASK_TMPDIR/prompt)" & CLAUDE_PID=$!; echo "$CLAUDE_PID" > "$TASK_TMPDIR/pid"; wait $CLAUDE_PID; ECODE=$?; echo "$ECODE" > "$TASK_TMPDIR/exit_code.tmp" && mv "$TASK_TMPDIR/exit_code.tmp" "$TASK_TMPDIR/exit_code"; openclaw system event --text "Claude done: <task-name>" --mode now; touch "$TASK_TMPDIR/done"' Enter
+  'cd <project-dir> && claude -p --model <model-name> "$(cat $TASK_TMPDIR/prompt)" & CLAUDE_PID=$!; echo "$CLAUDE_PID" > "$TASK_TMPDIR/pid"; jq --argjson pid "$CLAUDE_PID" ".pid = \$pid" "$TASK_TMPDIR/manifest.json" > "$TASK_TMPDIR/manifest.json.tmp" && mv "$TASK_TMPDIR/manifest.json.tmp" "$TASK_TMPDIR/manifest.json"; wait $CLAUDE_PID; ECODE=$?; echo "$ECODE" > "$TASK_TMPDIR/exit_code.tmp" && mv "$TASK_TMPDIR/exit_code.tmp" "$TASK_TMPDIR/exit_code"; if [ "$ECODE" -eq 0 ]; then STATUS=completed; else STATUS=failed; fi; jq --arg finished_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" --argjson exit_code "$ECODE" --arg status "$STATUS" --arg output_tail "$(tail -n 100 "$TASK_TMPDIR/output.log" 2>/dev/null || echo "")" ". + {finished_at: \$finished_at, exit_code: \$exit_code, status: \$status, output_tail: \$output_tail}" "$TASK_TMPDIR/manifest.json" > "$TASK_TMPDIR/manifest.json.tmp" && mv "$TASK_TMPDIR/manifest.json.tmp" "$TASK_TMPDIR/manifest.json"; openclaw system event --text "Claude done: <task-name>" --mode now; touch "$TASK_TMPDIR/done"' Enter
 ```
 
-The `openclaw system event` uses `;` (fire-and-forget) so notification failure does not block completion. It runs after exit_code is written but before done is touched.
+The `openclaw system event` uses `;` (fire-and-forget) so notification failure does not block completion. The ordering is: exit_code write -> manifest completion update -> openclaw event -> touch done.
 
 ## Monitor Progress
 
@@ -216,12 +231,13 @@ Before starting a task:
 
 1. Create secure temp directory (`mktemp -d` + `chmod 700`)
 2. Write prompt to `$TMPDIR/prompt` via orchestrator write tool
-3. Create tmux session with `TASK_TMPDIR` env var
-4. Set up pipe-pane output capture with ANSI stripping
-5. Launch Claude Code with wrapper (PID capture + done-file protocol)
-6. Verify pipe-pane is capturing output (`ls -la $TMPDIR/output.log`)
-7. Notify user: task content, session name (`claude-<task-name>`), model used
-8. Monitor via `scripts/monitor.sh` (done-file/PID detection) or `tail -n 50 $TMPDIR/output.log`
+3. Create initial `manifest.json` with `jq -n` (all eight fields, pid=0 placeholder)
+4. Create tmux session with `TASK_TMPDIR` env var
+5. Set up pipe-pane output capture with ANSI stripping
+6. Launch Claude Code with wrapper (PID capture + manifest updates + done-file protocol)
+7. Verify pipe-pane is capturing output (`ls -la $TMPDIR/output.log`)
+8. Notify user: task content, session name (`claude-<task-name>`), model used
+9. Monitor via `scripts/monitor.sh` (done-file/PID detection) or `tail -n 50 $TMPDIR/output.log`
 
 ## Limitations
 
@@ -233,5 +249,6 @@ Before starting a task:
 This skill requires:
 - **tmux** -- Process isolation and session management
 - **Claude Code CLI** (`claude`) -- The coding agent that executes tasks
+- **jq** -- JSON manifest creation and updates (available at /usr/bin/jq on macOS)
 
 The orchestrator must be configured to delegate coding tasks through this skill instead of attempting them directly. SKILL.md is the orchestrator's interface -- it reads this document and follows the instructions.
