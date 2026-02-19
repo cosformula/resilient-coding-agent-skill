@@ -158,6 +158,8 @@ Continuous output is captured to `$TMPDIR/output.log` via pipe-pane (set up in S
 tail -n 50 $TMPDIR/output.log
 ```
 
+Both `output.log` and `manifest.json` persist after the tmux session is killed -- `$TMPDIR` is created outside the session and is not deleted by monitor cleanup or `tmux kill-session`. This means result retrieval via `tail -n 50 $TMPDIR/output.log` or `jq -r '.output_tail' $TMPDIR/manifest.json` works even after the session is gone.
+
 For ad-hoc checks or manual debugging, tmux capture-pane is still available:
 
 ```bash
@@ -177,7 +179,7 @@ Check progress when:
 
 ## Health Monitoring
 
-For long-running tasks, use the active monitor script (`scripts/monitor.sh`) instead of checking on demand. The monitor runs continuously with configurable intervals and handles its own timing -- no cron or external scheduler needed.
+Use the active monitor script (`scripts/monitor.sh`) for every task. The monitor runs continuously with configurable intervals and handles its own timing -- no cron or external scheduler needed.
 
 The monitor uses a three-layer detection flow, checked in this exact priority order every iteration:
 
@@ -260,7 +262,7 @@ Before starting a task:
 6. Launch Claude Code with wrapper (PID capture + manifest updates + done-file protocol)
 7. Verify pipe-pane is capturing output (`ls -la $TMPDIR/output.log`)
 8. Notify user: task content, session name (`claude-<task-name>`), model used
-9. Monitor via `scripts/monitor.sh` (done-file/PID detection) or `tail -n 50 $TMPDIR/output.log`
+9. Launch monitor: `scripts/monitor.sh` (handles done-file detection, PID liveness, and staleness -- mandatory for every task)
 
 ## Limitations
 
