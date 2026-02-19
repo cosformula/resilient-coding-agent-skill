@@ -13,10 +13,10 @@ Rewrite the OpenClaw "Muscles" skill from a multi-agent, heuristic-based system 
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - Remove multi-agent dead code, rewrite SKILL.md scope, add model routing, finalize task directory schema
-- [ ] **Phase 2: Detection Infrastructure** - PID tracking, done-file markers, continuous output capture with ANSI stripping
-- [ ] **Phase 3: Structured State** - JSON task manifest with atomic writes and output tail on completion
-- [ ] **Phase 4: Monitor Rewrite** - Three-layer deterministic detection replacing regex heuristics
-- [ ] **Phase 5: Brain Integration** - All-tasks-via-tmux policy and end-to-end lifecycle validation
+- [x] **Phase 2: Detection Infrastructure** - PID tracking, done-file markers, continuous output capture with ANSI stripping
+- [x] **Phase 3: Structured State** - JSON task manifest with atomic writes and output tail on completion
+- [x] **Phase 4: Monitor Rewrite** - Three-layer deterministic detection replacing regex heuristics
+- [x] **Phase 5: Brain Integration** - All-tasks-via-tmux policy and end-to-end lifecycle validation
 
 ## Phase Details
 
@@ -48,8 +48,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- Update SKILL.md: shell wrapper with PID capture, pipe-pane output capture with ANSI stripping, done-file protocol
-- [ ] 02-02-PLAN.md -- Rewrite monitor.sh detection: done-file check + PID liveness replace scrollback regex parsing
+- [x] 02-01-PLAN.md -- Update SKILL.md: shell wrapper with PID capture, pipe-pane output capture with ANSI stripping, done-file protocol
+- [x] 02-02-PLAN.md -- Rewrite monitor.sh detection: done-file check + PID liveness replace scrollback regex parsing
 
 ### Phase 3: Structured State
 **Goal**: A machine-readable JSON task manifest that the Brain can query for any task's status, output, and result without parsing ad-hoc files
@@ -77,7 +77,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 04-01-PLAN.md -- Rewrite monitor.sh with three-layer detection, configurable intervals, manifest updates, EXIT trap; update SKILL.md Health Monitoring docs
+- [x] 04-01-PLAN.md -- Rewrite monitor.sh with three-layer detection, configurable intervals, manifest updates, EXIT trap; update SKILL.md Health Monitoring docs
 
 ### Phase 5: Brain Integration
 **Goal**: Every task the Brain delegates flows through tmux with full reliability guarantees, and results are retrievable after session cleanup
@@ -90,7 +90,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 05-01-PLAN.md -- Edit SKILL.md: remove duration-based conditional, make monitor mandatory in checklist, document $TMPDIR persistence
+- [x] 05-01-PLAN.md -- Edit SKILL.md: remove duration-based conditional, make monitor mandatory in checklist, document $TMPDIR persistence
 
 ## Progress
 
@@ -102,5 +102,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. Foundation | 2/2 | Complete | 2026-02-18 |
 | 2. Detection Infrastructure | 2/2 | Complete | 2026-02-18 |
 | 3. Structured State | 1/1 | Complete | 2026-02-18 |
-| 4. Monitor Rewrite | 0/1 | Not started | - |
-| 5. Brain Integration | 0/1 | Not started | - |
+| 4. Monitor Rewrite | 1/1 | Complete | 2026-02-19 |
+| 5. Brain Integration | 1/1 | Complete | 2026-02-19 |

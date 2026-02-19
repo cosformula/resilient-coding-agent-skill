@@ -58,7 +58,7 @@
 | TS-9 | Phase 1 | Complete |
 | TS-10 | Phase 1 | Complete |
 | D-1 | Phase 4 | Complete |
-| D-2 | Phase 5 | Pending |
+| D-2 | Phase 5 | Complete |
 | D-3 | Phase 4 | Complete |
 | D-4 | Phase 1 | Complete |
 | D-5 | Phase 3 | Complete |
