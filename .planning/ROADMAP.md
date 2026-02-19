@@ -87,10 +87,10 @@ Plans:
   1. SKILL.md contains no "fast path" or duration-based routing -- every task, regardless of expected duration, uses the tmux session + monitor flow
   2. The Brain can retrieve task results via `tail -n 50 $TMPDIR/output.log` or by reading `output_tail` from manifest.json, even after the tmux session has been killed
   3. An end-to-end task lifecycle (delegate -> execute -> crash -> resume -> complete -> retrieve results) works without manual intervention
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 05-01: TBD
+- [ ] 05-01-PLAN.md -- Edit SKILL.md: remove duration-based conditional, make monitor mandatory in checklist, document $TMPDIR persistence
 
 ## Progress
 
