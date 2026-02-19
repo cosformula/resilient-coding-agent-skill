@@ -62,7 +62,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 03-01-PLAN.md -- Add JSON task manifest to SKILL.md: initial creation, PID update, completion update with output_tail
+- [x] 03-01-PLAN.md -- Add JSON task manifest to SKILL.md: initial creation, PID update, completion update with output_tail
 
 ### Phase 4: Monitor Rewrite
 **Goal**: A deterministic monitor that detects completion, crashes, and hangs using filesystem signals instead of regex heuristics, with configurable intervals and clean resource management
@@ -101,7 +101,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/2 | Complete | 2026-02-18 |
-| 2. Detection Infrastructure | 0/2 | Not started | - |
-| 3. Structured State | 0/1 | Not started | - |
+| 2. Detection Infrastructure | 2/2 | Complete | 2026-02-18 |
+| 3. Structured State | 1/1 | Complete | 2026-02-18 |
 | 4. Monitor Rewrite | 0/2 | Not started | - |
 | 5. Brain Integration | 0/1 | Not started | - |

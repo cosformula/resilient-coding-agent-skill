@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-18)
 
 **Core value:** Every coding task the Brain delegates must reliably execute in an isolated Claude Code session, with the right model for the job, crash recovery, output capture, and structured results.
-**Current focus:** Phase 2: Detection Infrastructure
+**Current focus:** Phase 3: Structured State
 
 ## Current Position
 
-Phase: 2 of 5 (Detection Infrastructure)
-Plan: 2 of 2 in current phase
-Status: Executing
-Last activity: 2026-02-18 -- Completed 02-02-PLAN.md
+Phase: 3 of 5 (Structured State)
+Plan: 1 of 1 in current phase
+Status: Complete
+Last activity: 2026-02-18 -- Completed 03-01-PLAN.md
 
-Progress: [####......] 40%
+Progress: [######....] 60%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 1.5min
-- Total execution time: 0.1 hours
+- Total plans completed: 5
+- Average duration: 1.6min
+- Total execution time: 0.13 hours
 
 **By Phase:**
 
@@ -31,9 +31,10 @@ Progress: [####......] 40%
 | Phase 01 P02 | 1 task | 1min | 1min |
 | Phase 02 P01 | 1 task | 2min | 2min |
 | Phase 02 P02 | 1 task | 1min | 1min |
+| Phase 03 P01 | 1 task | 2min | 2min |
 
 **Recent Trend:**
-- Last 5 plans: 2min, 1min, 2min, 1min
+- Last 5 plans: 2min, 1min, 2min, 1min, 2min
 - Trend: Consistent
 
 *Updated after each plan completion*
@@ -60,6 +61,10 @@ Recent decisions affecting current work:
 - [Phase 02 P02]: Done-file checked BEFORE PID liveness to prevent race conditions
 - [Phase 02 P02]: 10-second grace period after resume instead of PID re-capture (deferred to Phase 4)
 - [Phase 02 P02]: TASK_TMPDIR validated as directory at startup to fail fast on bad paths
+- [Phase 03 P01]: Manifest created by orchestrator (Step 3) before tmux session -- ensures manifest exists at task start
+- [Phase 03 P01]: PID=0 placeholder in initial manifest, updated by wrapper after $! -- two-step because real PID unknown until background launch
+- [Phase 03 P01]: jq variable refs use \$varname inside single-quoted send-keys -- pane shell passes literal $ to jq
+- [Phase 03 P01]: output_tail captures last 100 lines with 2>/dev/null fallback -- safe if output.log missing
 
 ### Pending Todos
 
@@ -74,5 +79,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-18
-Stopped at: Completed 02-01-PLAN.md -- SKILL.md launch template updated with wrapper + pipe-pane
+Stopped at: Completed 03-01-PLAN.md -- SKILL.md updated with manifest.json creation, PID update, and completion update
 Resume file: None

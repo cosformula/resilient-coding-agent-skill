@@ -52,7 +52,7 @@
 | TS-3 | Phase 2 | Complete |
 | TS-4 | Phase 2 | Complete |
 | TS-5 | Phase 1 | Complete |
-| TS-6 | Phase 3 | Pending |
+| TS-6 | Phase 3 | Complete |
 | TS-7 | Phase 1 | Complete |
 | TS-8 | Phase 1 | Complete |
 | TS-9 | Phase 1 | Complete |
@@ -61,7 +61,7 @@
 | D-2 | Phase 5 | Pending |
 | D-3 | Phase 4 | Pending |
 | D-4 | Phase 1 | Complete |
-| D-5 | Phase 3 | Pending |
+| D-5 | Phase 3 | Complete |
 | D-6 | Phase 4 | Pending |
 | D-7 | Phase 4 | Pending |
-| D-8 | Phase 3 | Pending |
+| D-8 | Phase 3 | Complete |
